@@ -1,4 +1,5 @@
 import * as React from "react"
+import { Link } from "react-router-dom"
 import {
 LayoutDashboard,
 Search,
@@ -18,8 +19,8 @@ import {
 // This is sample data.
 const data = {
   user: {
-    name: "shadcn",
-    email: "m@example.com",
+    name: "Daniel McPherson",
+    email: "daniel.mcpherson@live.co.uk",
     avatar: "/avatars/shadcn.jpg",
   },
 }
@@ -28,17 +29,17 @@ const data = {
 const items = [
   {
     title: "Dashboard",
-    url: "#",
+    url: "/dashboard",
     icon: LayoutDashboard,
   },
   {
     title: "Search",
-    url: "#",
+    url: "/search",
     icon: Search,
   },
   {
     title: "CRM",
-    url: "#",
+    url: "/crm",
     icon: Calendar,
   }
 ]
@@ -50,15 +51,15 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         <NavUser user={data.user} />
       </SidebarHeader>
       <SidebarContent>
-        {/* Directly place SidebarMenu inside SidebarContent */}
         <SidebarMenu>
           {items.map((item) => (
             <SidebarMenuItem key={item.title}>
+              {/* Use Link component instead of <a> tag */}
               <SidebarMenuButton asChild>
-                <a href={item.url}>
+                <Link to={item.url}> {/* Use 'to' prop for Link */}
                   <item.icon />
                   <span>{item.title}</span>
-                </a>
+                </Link>
               </SidebarMenuButton>
             </SidebarMenuItem>
           ))}
