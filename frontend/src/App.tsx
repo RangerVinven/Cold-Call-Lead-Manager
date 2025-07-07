@@ -1,13 +1,12 @@
 import React, { useState, createContext, useContext, useEffect, useCallback } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
-import { Calendar as CalendarIcon, ChevronDown, PlusCircle, Search, Star, Trash2, X, Phone, Mail, GripVertical, MoreHorizontal, Loader2 } from 'lucide-react';
+import { Calendar as CalendarIcon, ChevronDown, PlusCircle, Search, Star, Trash2, X, Phone, Mail, GripVertical, MoreHorizontal, Loader2, Eye } from 'lucide-react';
 import { format, addDays, isToday, parseISO } from 'date-fns';
 
 // --- API CONFIGURATION ---
 const API_BASE_URL = 'http://localhost:8080'; // Your Go backend URL
 
 // --- API HELPER ---
-// A centralized function to handle API requests, including adding the auth token.
 const apiFetch = async (path, options = {}) => {
     const token = localStorage.getItem('authToken');
     const headers = {
@@ -25,7 +24,6 @@ const apiFetch = async (path, options = {}) => {
         throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
     }
     
-    // For 204 No Content, etc.
     if (response.status === 204) {
         return null;
     }
@@ -43,7 +41,6 @@ const AuthProvider = ({ children }) => {
     const [isAuthLoading, setIsAuthLoading] = useState(true);
 
     useEffect(() => {
-        // This effect runs once on app load to check for existing token/user
         const storedToken = localStorage.getItem('authToken');
         const storedUser = localStorage.getItem('user');
         if (storedToken && storedUser) {
@@ -92,8 +89,6 @@ const AuthProvider = ({ children }) => {
 const useAuth = () => useContext(AuthContext);
 
 // --- UI COMPONENTS (SHADCN/UI inspired) ---
-// These are simplified versions for brevity.
-
 const Button = ({ children, variant = 'default', className = '', disabled, ...props }) => {
   const baseClasses = 'inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none ring-offset-background';
   const variants = {
@@ -174,103 +169,87 @@ const DropdownMenuItem = ({ children, onSelect }) => (
 );
 
 const FullPageLoader = () => (
-    <div className="flex h-screen w-screen items-center justify-center">
+    <div className="flex h-full w-full items-center justify-center">
         <Loader2 className="h-12 w-12 animate-spin text-blue-600" />
     </div>
 );
 
 // --- APP COMPONENTS ---
 
-function PageSpeedBadge({ score }) {
-  const getColor = () => {
-    if (score >= 90) return 'bg-green-100 text-green-800';
-    if (score >= 50) return 'bg-yellow-100 text-yellow-800';
-    return 'bg-red-100 text-red-800';
-  };
-  return <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getColor()}`}>{score}</span>;
-}
+function Dashboard() {
+    const [crmData, setCrmData] = useState(null);
+    const [isLoading, setIsLoading] = useState(true);
+    const [error, setError] = useState(null);
 
-function Dashboard({ crmData }) {
-  const { leads, columns } = crmData;
-  const allLeads = Object.values(leads);
+    useEffect(() => {
+        const fetchCrmData = async () => {
+            try {
+                const data = await apiFetch('/api/crm');
+                setCrmData(data);
+            } catch (err) {
+                setError(err.message);
+            } finally {
+                setIsLoading(false);
+            }
+        };
+        fetchCrmData();
+    }, []);
 
-  const callsToday = allLeads.filter(lead => lead.callBackDate && isToday(parseISO(lead.callBackDate))).length;
+    if (isLoading) return <FullPageLoader />;
+    if (error) return <div className="text-red-500">Error loading dashboard: {error}</div>;
+    if (!crmData) return <div>No data available.</div>;
 
-  const statusData = [
-    { name: 'To Be Called', value: columns['tobe-called'].leadIds.length },
-    { name: 'Contacted', value: columns['contacted'].leadIds.length },
-  ];
-  const COLORS = ['#0088FE', '#00C49F'];
+    const { leads, columns } = crmData;
+    const allLeads = Object.values(leads);
+    const callsToday = allLeads.filter(lead => lead.callBackDate && isToday(parseISO(lead.callBackDate))).length;
+    const statusData = [
+        { name: 'To Be Called', value: columns['tobe-called'].leadIds.length },
+        { name: 'Contacted', value: columns['contacted'].leadIds.length },
+    ];
+    const COLORS = ['#0088FE', '#00C49F'];
+    const last7Days = Array.from({ length: 7 }).map((_, i) => format(addDays(new Date(), -i), 'yyyy-MM-dd')).reverse();
+    const callsLast7Days = last7Days.map(day => ({ date: format(parseISO(day), 'MMM dd'), calls: 0 }));
 
-  const last7Days = Array.from({ length: 7 }).map((_, i) => {
-    const d = addDays(new Date(), -i);
-    return format(d, 'yyyy-MM-dd');
-  }).reverse();
-
-  // This logic would need to be adapted if history is stored on the backend
-  const callsLast7Days = last7Days.map(day => ({ date: format(parseISO(day), 'MMM dd'), calls: 0 }));
-
-  return (
-    <div className="space-y-6">
-      <h1 className="text-3xl font-bold">Dashboard</h1>
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-        <Card>
-          <CardHeader>
-            <CardTitle>Total Leads in CRM</CardTitle>
-            <CardDescription>All leads across all stages.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <p className="text-4xl font-bold">{allLeads.length}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle>Calls Scheduled Today</CardTitle>
-            <CardDescription>Leads marked for callback today.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <p className="text-4xl font-bold">{callsToday}</p>
-          </CardContent>
-        </Card>
-      </div>
-      <div className="grid gap-6 md:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>Lead Status Breakdown</CardTitle>
-          </CardHeader>
-          <CardContent className="h-[300px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie data={statusData} cx="50%" cy="50%" labelLine={false} outerRadius={100} fill="#8884d8" dataKey="value" label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}>
-                  {statusData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                  ))}
-                </Pie>
-                <Tooltip />
-              </PieChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle>Contacted Leads (Last 7 Days)</CardTitle>
-          </CardHeader>
-          <CardContent className="h-[300px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={callsLast7Days}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="date" />
-                <YAxis allowDecimals={false} />
-                <Tooltip />
-                <Legend />
-                <Bar dataKey="calls" fill="#8884d8" name="Leads Contacted" />
-              </BarChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
-      </div>
-    </div>
-  );
+    return (
+        <div className="space-y-6">
+            <h1 className="text-3xl font-bold">Dashboard</h1>
+            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+                <Card>
+                    <CardHeader><CardTitle>Total Leads in CRM</CardTitle><CardDescription>All leads across all stages.</CardDescription></CardHeader>
+                    <CardContent><p className="text-4xl font-bold">{allLeads.length}</p></CardContent>
+                </Card>
+                <Card>
+                    <CardHeader><CardTitle>Calls Scheduled Today</CardTitle><CardDescription>Leads marked for callback today.</CardDescription></CardHeader>
+                    <CardContent><p className="text-4xl font-bold">{callsToday}</p></CardContent>
+                </Card>
+            </div>
+            <div className="grid gap-6 md:grid-cols-2">
+                <Card>
+                    <CardHeader><CardTitle>Lead Status Breakdown</CardTitle></CardHeader>
+                    <CardContent className="h-[300px]">
+                        <ResponsiveContainer width="100%" height="100%">
+                            <PieChart>
+                                <Pie data={statusData} cx="50%" cy="50%" labelLine={false} outerRadius={100} fill="#8884d8" dataKey="value" label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}>
+                                    {statusData.map((entry, index) => <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />)}
+                                </Pie>
+                                <Tooltip />
+                            </PieChart>
+                        </ResponsiveContainer>
+                    </CardContent>
+                </Card>
+                <Card>
+                    <CardHeader><CardTitle>Contacted Leads (Last 7 Days)</CardTitle></CardHeader>
+                    <CardContent className="h-[300px]">
+                        <ResponsiveContainer width="100%" height="100%">
+                            <BarChart data={callsLast7Days}>
+                                <CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="date" /><YAxis allowDecimals={false} /><Tooltip /><Legend /><Bar dataKey="calls" fill="#8884d8" name="Leads Contacted" />
+                            </BarChart>
+                        </ResponsiveContainer>
+                    </CardContent>
+                </Card>
+            </div>
+        </div>
+    );
 }
 
 function Searches({ onSelectSearch }) {
@@ -293,7 +272,7 @@ function Searches({ onSelectSearch }) {
 
     useEffect(() => {
         fetchSearches();
-        const interval = setInterval(fetchSearches, 5000); // Poll every 5 seconds
+        const interval = setInterval(fetchSearches, 5000);
         return () => clearInterval(interval);
     }, [fetchSearches]);
 
@@ -320,14 +299,10 @@ function Searches({ onSelectSearch }) {
 
     return (
         <div className="space-y-6">
-            <div className="flex justify-between items-center">
-                <h1 className="text-3xl font-bold">Searches</h1>
-            </div>
+            <div className="flex justify-between items-center"><h1 className="text-3xl font-bold">Searches</h1></div>
             <div className="flex items-center space-x-2">
                 <Input placeholder="Enter a keyword to start a new search (e.g., 'plumbers in london')" value={keyword} onChange={e => setKeyword(e.target.value)} disabled={isSubmitting} />
-                <Button onClick={handleNewSearch} disabled={isSubmitting || !keyword.trim()}>
-                    <Search className="mr-2 h-4 w-4" /> New Search
-                </Button>
+                <Button onClick={handleNewSearch} disabled={isSubmitting || !keyword.trim()}><Search className="mr-2 h-4 w-4" /> New Search</Button>
             </div>
             <Card>
                 <CardContent className="p-0">
@@ -338,19 +313,27 @@ function Searches({ onSelectSearch }) {
                                 <TableHead>Status</TableHead>
                                 <TableHead>Leads Found</TableHead>
                                 <TableHead>Date</TableHead>
+                                <TableHead className="text-right">Actions</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
                             {searches.map(search => (
-                                <TableRow key={search.id} className={search.status === 'Completed' ? "cursor-pointer" : "cursor-not-allowed opacity-70"} onClick={() => search.status === 'Completed' && onSelectSearch(search)}>
+                                <TableRow key={search.id}>
                                     <TableCell className="font-medium">{search.keyword}</TableCell>
-                                    <TableCell>
-                                        <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${search.status === 'Completed' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>
-                                            {search.status}
-                                        </span>
-                                    </TableCell>
+                                    <TableCell><span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${search.status === 'Completed' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>{search.status}</span></TableCell>
                                     <TableCell>{search.leadsFound}</TableCell>
                                     <TableCell>{format(new Date(search.date), 'PPpp')}</TableCell>
+                                    <TableCell className="text-right">
+                                        <Button 
+                                            variant="outline" 
+                                            size="sm" 
+                                            disabled={search.status !== 'Completed'} 
+                                            onClick={() => onSelectSearch(search)}
+                                        >
+                                            <Eye className="mr-2 h-4 w-4" />
+                                            View Leads
+                                        </Button>
+                                    </TableCell>
                                 </TableRow>
                             ))}
                         </TableBody>
@@ -368,19 +351,14 @@ function LeadsView({ search, onBack }) {
     const [selectedLeads, setSelectedLeads] = useState(new Set());
 
     useEffect(() => {
-        const fetchLeads = async () => {
+        if (search && search.id) {
             setIsLoading(true);
-            try {
-                const data = await apiFetch(`/api/leads/${search.id}`);
-                setLeads(data || []);
-            } catch (err) {
-                setError(err.message);
-            } finally {
-                setIsLoading(false);
-            }
-        };
-        fetchLeads();
-    }, [search.id]);
+            apiFetch(`/api/leads/${search.id}`)
+                .then(data => setLeads(data || []))
+                .catch(err => setError(err.message))
+                .finally(() => setIsLoading(false));
+        }
+    }, [search]);
 
     const handleSelect = (leadId) => {
         setSelectedLeads(prev => {
@@ -391,17 +369,12 @@ function LeadsView({ search, onBack }) {
         });
     };
 
-    const handleSelectAll = (e) => {
-        setSelectedLeads(e.target.checked ? new Set(leads.map(l => l.id)) : new Set());
-    };
+    const handleSelectAll = (e) => setSelectedLeads(e.target.checked ? new Set(leads.map(l => l.id)) : new Set());
 
     const handleAddToCRM = async () => {
         const leadsToAdd = leads.filter(l => selectedLeads.has(l.id));
         try {
-            await apiFetch('/api/crm/leads', {
-                method: 'POST',
-                body: JSON.stringify(leadsToAdd),
-            });
+            await apiFetch('/api/crm/leads', { method: 'POST', body: JSON.stringify(leadsToAdd) });
             alert(`${leadsToAdd.length} leads added to CRM.`);
             setSelectedLeads(new Set());
         } catch (err) {
@@ -430,13 +403,7 @@ function LeadsView({ search, onBack }) {
                 <CardContent className="p-0">
                     <Table>
                         <TableHeader>
-                            <TableRow>
-                                <TableHead className="w-[50px]"><Checkbox onChange={handleSelectAll} checked={selectedLeads.size === leads.length && leads.length > 0} /></TableHead>
-                                <TableHead>Company Name</TableHead>
-                                <TableHead>Phone Number</TableHead>
-                                <TableHead>Website</TableHead>
-                                <TableHead>Email</TableHead>
-                            </TableRow>
+                            <TableRow><TableHead className="w-[50px]"><Checkbox onChange={handleSelectAll} checked={selectedLeads.size === leads.length && leads.length > 0} /></TableHead><TableHead>Company Name</TableHead><TableHead>Phone Number</TableHead><TableHead>Website</TableHead><TableHead>Email</TableHead></TableRow>
                         </TableHeader>
                         <TableBody>
                             {leads.map(lead => (
@@ -473,19 +440,14 @@ function CRM() {
         }
     }, []);
 
-    useEffect(() => {
-        fetchCrmData();
-    }, [fetchCrmData]);
+    useEffect(() => { fetchCrmData(); }, [fetchCrmData]);
 
     const handleDrop = async (e, targetColumnId) => {
         const leadId = e.dataTransfer.getData("leadId");
         const sourceColumnId = e.dataTransfer.getData("sourceColumnId");
         if (sourceColumnId === targetColumnId) return;
 
-        // Optimistic UI update
-        const originalCrmData = { ...crmData };
-        const leadToMove = crmData.leads[leadId];
-        
+        const originalCrmData = JSON.parse(JSON.stringify(crmData));
         setCrmData(prev => {
             const newData = JSON.parse(JSON.stringify(prev));
             newData.columns[sourceColumnId].leadIds = newData.columns[sourceColumnId].leadIds.filter(id => id !== leadId);
@@ -495,13 +457,10 @@ function CRM() {
         });
 
         try {
-            await apiFetch('/api/crm/state', {
-                method: 'PUT',
-                body: JSON.stringify({ leadId, newColumnId: targetColumnId }),
-            });
+            await apiFetch('/api/crm/state', { method: 'PUT', body: JSON.stringify({ leadId, newColumnId: targetColumnId }) });
         } catch (err) {
             alert(`Error updating lead: ${err.message}`);
-            setCrmData(originalCrmData); // Revert on error
+            setCrmData(originalCrmData);
         }
     };
 
@@ -509,19 +468,9 @@ function CRM() {
 
     const handleUpdateLead = async (updatedLead) => {
         const originalLead = crmData.leads[updatedLead.id];
-        
-        // Optimistic update
-        setCrmData(prev => {
-            const newData = { ...prev };
-            newData.leads[updatedLead.id] = updatedLead;
-            return newData;
-        });
-
+        setCrmData(prev => ({ ...prev, leads: { ...prev.leads, [updatedLead.id]: updatedLead } }));
         try {
-            await apiFetch(`/api/crm/leads/${updatedLead.id}`, {
-                method: 'PUT',
-                body: JSON.stringify(updatedLead),
-            });
+            await apiFetch(`/api/crm/leads/${updatedLead.id}`, { method: 'PUT', body: JSON.stringify(updatedLead) });
         } catch (err) {
             alert(`Error saving lead: ${err.message}`);
             setCrmData(prev => ({ ...prev, leads: { ...prev.leads, [updatedLead.id]: originalLead } }));
@@ -564,23 +513,13 @@ function CRM() {
 
 function LeadModal({ lead, onClose, onUpdate }) {
     const [currentLead, setCurrentLead] = useState(lead);
-
-    const handleFieldChange = (field, value) => {
-        setCurrentLead(prev => ({ ...prev, [field]: value }));
-    };
-
-    const handleSave = () => {
-        onUpdate(currentLead);
-        onClose();
-    };
+    const handleFieldChange = (field, value) => setCurrentLead(prev => ({ ...prev, [field]: value }));
+    const handleSave = () => { onUpdate(currentLead); onClose(); };
 
     return (
         <Dialog open={true} onClose={onClose}>
             <DialogContent className="pt-8">
-                <DialogHeader>
-                    <DialogTitle>{currentLead.companyName}</DialogTitle>
-                    <DialogDescription>{currentLead.website}</DialogDescription>
-                </DialogHeader>
+                <DialogHeader><DialogTitle>{currentLead.companyName}</DialogTitle><DialogDescription>{currentLead.website}</DialogDescription></DialogHeader>
                 <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div>
                         <h4 className="font-semibold mb-2">Contact Info</h4>
@@ -588,36 +527,25 @@ function LeadModal({ lead, onClose, onUpdate }) {
                             <p className="flex items-center"><Phone className="mr-2 h-4 w-4 text-gray-500" /> <a href={`tel:${currentLead.phone}`} className="text-blue-600 hover:underline">{currentLead.phone}</a></p>
                             <p className="flex items-center"><Mail className="mr-2 h-4 w-4 text-gray-500" /> <a href={`mailto:${currentLead.email}`} className="text-blue-600 hover:underline">{currentLead.email}</a></p>
                         </div>
-
                         <h4 className="font-semibold mt-6 mb-2">Times Called</h4>
                         <div className="flex items-center space-x-2">
                             <Button variant="outline" size="sm" onClick={() => handleFieldChange('timesCalled', Math.max(0, currentLead.timesCalled - 1))}>-</Button>
                             <span className="font-bold text-lg w-8 text-center">{currentLead.timesCalled}</span>
                             <Button variant="outline" size="sm" onClick={() => handleFieldChange('timesCalled', currentLead.timesCalled + 1)}>+</Button>
                         </div>
-                        
                         <h4 className="font-semibold mt-6 mb-2">Call Back Date</h4>
                         <Input type="date" value={currentLead.callBackDate ? format(parseISO(currentLead.callBackDate), 'yyyy-MM-dd') : ''} onChange={e => handleFieldChange('callBackDate', e.target.value ? parseISO(e.target.value).toISOString() : null)} />
                     </div>
                     <div>
                         <h4 className="font-semibold mb-2">Notes</h4>
-                        <textarea
-                            value={currentLead.notes}
-                            onChange={(e) => handleFieldChange('notes', e.target.value)}
-                            className="w-full h-48 p-2 border rounded-md text-sm"
-                            placeholder="Add notes about conversations, follow-ups, etc."
-                        />
+                        <textarea value={currentLead.notes} onChange={(e) => handleFieldChange('notes', e.target.value)} className="w-full h-48 p-2 border rounded-md text-sm" placeholder="Add notes about conversations, follow-ups, etc." />
                     </div>
                 </div>
             </DialogContent>
-            <DialogFooter>
-                <Button variant="secondary" onClick={onClose}>Cancel</Button>
-                <Button onClick={handleSave}>Save Changes</Button>
-            </DialogFooter>
+            <DialogFooter><Button variant="secondary" onClick={onClose}>Cancel</Button><Button onClick={handleSave}>Save Changes</Button></DialogFooter>
         </Dialog>
     );
 }
-
 
 function AuthPage() {
     const { login, register } = useAuth();
@@ -630,14 +558,10 @@ function AuthPage() {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-        setError('');
-        setIsLoading(true);
+        setError(''); setIsLoading(true);
         try {
-            if (isLogin) {
-                await login(email, password);
-            } else {
-                await register(name, email, password);
-            }
+            if (isLogin) { await login(email, password); }
+            else { await register(name, email, password); }
         } catch (err) {
             setError(err.message);
         } finally {
@@ -648,14 +572,10 @@ function AuthPage() {
     return (
         <div className="min-h-screen bg-gray-50 flex flex-col justify-center items-center">
             <div className="max-w-md w-full mx-auto">
-                <h2 className="text-3xl font-bold text-center text-gray-900 mb-8">
-                    {isLogin ? 'Welcome Back to BlueLeads' : 'Create Your Account'}
-                </h2>
+                <h2 className="text-3xl font-bold text-center text-gray-900 mb-8">{isLogin ? 'Welcome Back to BlueLeads' : 'Create Your Account'}</h2>
                 <Card className="p-8">
                     <form onSubmit={handleSubmit} className="space-y-6">
-                        {!isLogin && (
-                            <Input type="text" placeholder="Full Name" value={name} onChange={e => setName(e.target.value)} required />
-                        )}
+                        {!isLogin && <Input type="text" placeholder="Full Name" value={name} onChange={e => setName(e.target.value)} required />}
                         <Input type="email" placeholder="Email Address" value={email} onChange={e => setEmail(e.target.value)} required />
                         <Input type="password" placeholder="Password" value={password} onChange={e => setPassword(e.target.value)} required />
                         {error && <p className="text-red-500 text-sm">{error}</p>}
@@ -663,9 +583,7 @@ function AuthPage() {
                     </form>
                     <p className="mt-6 text-center text-sm text-gray-600">
                         {isLogin ? "Don't have an account?" : "Already have an account?"}
-                        <Button variant="link" onClick={() => { setIsLogin(!isLogin); setError(''); }} className="font-medium text-blue-600 hover:text-blue-500">
-                            {isLogin ? 'Sign up' : 'Sign in'}
-                        </Button>
+                        <Button variant="link" onClick={() => { setIsLogin(!isLogin); setError(''); }} className="font-medium text-blue-600 hover:text-blue-500">{isLogin ? 'Sign up' : 'Sign in'}</Button>
                     </p>
                 </Card>
             </div>
@@ -673,58 +591,51 @@ function AuthPage() {
     );
 }
 
+// *** FIXED AppLayout COMPONENT ***
 function AppLayout() {
   const { user, logout } = useAuth();
   const [activeView, setActiveView] = useState('dashboard');
   const [selectedSearch, setSelectedSearch] = useState(null);
-  const [crmData, setCrmData] = useState(null); // Fetched once for dashboard/crm
   
-  const fetchCrmData = useCallback(async () => {
-    try {
-        const data = await apiFetch('/api/crm');
-        setCrmData(data);
-    } catch (err) {
-        console.error("Failed to fetch CRM data for dashboard", err);
-        // Set a default empty state to prevent crashes
-        setCrmData({ leads: {}, columns: { 'tobe-called': { leadIds: [] }, 'contacted': { leadIds: [] } } });
-    }
-  }, []);
-
-  useEffect(() => {
-    if (activeView === 'dashboard' || activeView === 'crm') {
-      fetchCrmData();
-    }
-  }, [activeView, fetchCrmData]);
-
   const handleSelectSearch = (search) => {
     setSelectedSearch(search);
-    setActiveView('leads');
   };
 
   const handleBackToSearches = () => {
     setSelectedSearch(null);
-    setActiveView('searches');
   };
-
+  
   const renderContent = () => {
+    // This new logic prioritizes showing LeadsView if a search is selected.
+    if (selectedSearch) {
+      return <LeadsView search={selectedSearch} onBack={handleBackToSearches} />;
+    }
+
     switch (activeView) {
       case 'dashboard':
-        return crmData ? <Dashboard crmData={crmData} /> : <FullPageLoader />;
+        return <Dashboard />;
       case 'searches':
         return <Searches onSelectSearch={handleSelectSearch} />;
-      case 'leads':
-        return <LeadsView search={selectedSearch} onBack={handleBackToSearches} />;
       case 'crm':
-        return <CRM />; // CRM component fetches its own data now
+        return <CRM />;
       default:
-        return crmData ? <Dashboard crmData={crmData} /> : <FullPageLoader />;
+        return <Dashboard />;
     }
   };
 
   const NavLink = ({ view, children }) => (
     <button
-      onClick={() => setActiveView(view)}
-      className={`flex items-center px-4 py-2.5 text-sm font-medium rounded-md transition-colors ${activeView === view ? 'bg-blue-100 text-blue-700' : 'text-gray-600 hover:bg-gray-100'}`}
+      onClick={() => {
+        // When clicking a main nav link, always clear the selected search
+        // to ensure we navigate away from the leads view.
+        setSelectedSearch(null); 
+        setActiveView(view);
+      }}
+      className={`flex items-center px-4 py-2.5 text-sm font-medium rounded-md transition-colors ${
+        // The active state is now solely based on the activeView state
+        // and whether a search is selected.
+        (activeView === view && !selectedSearch) ? 'bg-blue-100 text-blue-700' : 'text-gray-600 hover:bg-gray-100'
+      }`}
     >
       {children}
     </button>
@@ -733,9 +644,7 @@ function AppLayout() {
   return (
     <div className="flex h-screen bg-gray-50">
       <aside className="w-64 bg-white border-r flex flex-col">
-        <div className="px-6 py-4">
-          <h1 className="text-2xl font-bold text-blue-600">BlueLeads</h1>
-        </div>
+        <div className="px-6 py-4"><h1 className="text-2xl font-bold text-blue-600">BlueLeads</h1></div>
         <nav className="flex-1 px-4 py-4 space-y-2">
           <NavLink view="dashboard"><Star className="mr-3 h-5 w-5" />Dashboard</NavLink>
           <NavLink view="searches"><Search className="mr-3 h-5 w-5" />Searches</NavLink>
@@ -747,31 +656,18 @@ function AppLayout() {
           </DropdownMenu>
         </div>
       </aside>
-      <main className="flex-1 p-8 overflow-y-auto">
-        {renderContent()}
-      </main>
+      <main className="flex-1 p-8 overflow-y-auto">{renderContent()}</main>
     </div>
   );
 }
 
 export default function App() {
-  return (
-    <AuthProvider>
-      <Main />
-    </AuthProvider>
-  );
+  return (<AuthProvider><Main /></AuthProvider>);
 }
 
 function Main() {
     const { user, isAuthLoading } = useAuth();
-
-    if (isAuthLoading) {
-        return <FullPageLoader />;
-    }
-
-    if (!user) {
-        return <AuthPage />;
-    }
-
+    if (isAuthLoading) return <FullPageLoader />;
+    if (!user) return <AuthPage />;
     return <AppLayout />;
 }
